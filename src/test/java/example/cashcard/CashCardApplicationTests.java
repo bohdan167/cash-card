@@ -5,39 +5,52 @@ import com.jayway.jsonpath.JsonPath;
 import net.minidev.json.JSONArray;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.annotation.DirtiesContext;
+import org.springframework.test.web.servlet.MockMvc;
 
 import java.net.URI;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@AutoConfigureMockMvc
+@WithMockUser(username = "sarah1", authorities = {"SCOPE_cashcard.read", "SCOPE_cashcard.write"})
 class CashCardApplicationTests {
 
 	@Autowired
 	TestRestTemplate restTemplate;
 
+	@Autowired
+	private MockMvc mockMvc;
+
 	@Test
-	void shouldReturnACashCardWhenDataIsSaved() {
-		ResponseEntity<String> response = restTemplate
-				.withBasicAuth("sarah1", "abc123")
-				.getForEntity("/cashcards/99", String.class);
-		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-
-		DocumentContext documentContext = JsonPath.parse(response.getBody());
-		Number id = documentContext.read("$.id");
-		assertThat(id).isEqualTo(99);
-
-		Double amount = documentContext.read("$.amount");
-		assertThat(amount).isEqualTo(123.45);
+	void shouldReturnACashCardWhenDataIsSaved() throws Exception {
+		mockMvc.perform(get("/cashcards/99"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.id").value(99))
+				.andExpect(jsonPath("$.amount").value(123.45));
 	}
 
+	@WithMockUser(username = "esuez5", authorities = {"SCOPE_cashcard:read"})
+    @Test
+    void shouldReturnForbiddenWhenCardBelongsToSomeoneElse() throws Exception {
+        this.mockMvc.perform(get("/cashcards/99"))
+                .andExpect(status().isForbidden());
+    }
+	
 	@Test
 	void shouldNotReturnACashCardWithAnUnknownId() {
 		ResponseEntity<String> response = restTemplate

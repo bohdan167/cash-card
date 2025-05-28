@@ -1,0 +1,11 @@
+logging.level:
+  org.springframework.security: TRACE
+
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          #issuer-uri: http://localhost:9000
+          public-key-location: classpath:authz.pub
+          audiences: cashcard-client
