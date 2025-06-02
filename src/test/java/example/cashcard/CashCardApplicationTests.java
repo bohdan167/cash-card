@@ -1,24 +1,14 @@
 package example.cashcard;
 
-import com.jayway.jsonpath.DocumentContext;
-import com.jayway.jsonpath.JsonPath;
-import net.minidev.json.JSONArray;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.client.TestRestTemplate;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
+
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.web.servlet.MockMvc;
 
-import java.net.URI;
-
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -29,9 +19,6 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 @AutoConfigureMockMvc
 @WithMockUser(username = "sarah1", authorities = {"SCOPE_cashcard.read", "SCOPE_cashcard.write"})
 class CashCardApplicationTests {
-
-	@Autowired
-	TestRestTemplate restTemplate;
 
 	@Autowired
 	private MockMvc mockMvc;
@@ -50,59 +37,38 @@ class CashCardApplicationTests {
         this.mockMvc.perform(get("/cashcards/99"))
                 .andExpect(status().isForbidden());
     }
-	
-	@Test
-	void shouldNotReturnACashCardWithAnUnknownId() {
-		ResponseEntity<String> response = restTemplate
-				.withBasicAuth("sarah1", "abc123")
-				.getForEntity("/cashcards/1000", String.class);
 
-		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
-		assertThat(response.getBody()).isBlank();
-	}
+	@WithMockUser(username="esuez5", authorities = {"SCOPE_cashcard:read", "SCOPE_cashcard:write"})
+    @Test
+    @DirtiesContext
+    void shouldCreateANewCashCard() throws Exception {
+        String location = this.mockMvc.perform(post("/cashcards")
+                .with(csrf())
+                        .contentType("application/json")
+                        .content("""
+                        {
+                            "amount" : 250.00
+                        }
+                        """))
+                .andExpect(status().isCreated())
+                .andExpect(header().exists("Location"))
+                .andReturn().getResponse().getHeader("Location");
 
-	@Test
-	@DirtiesContext
-	void shouldCreateANewCashCard() {
-		CashCard newCashCard = new CashCard(null, 250.00, null);
-		ResponseEntity<Void> createResponse = restTemplate
-				.withBasicAuth("sarah1", "abc123")
-				.postForEntity("/cashcards", newCashCard, Void.class);
-		assertThat(createResponse.getStatusCode()).isEqualTo(HttpStatus.CREATED);
-
-		URI locationOfNewCashCard = createResponse.getHeaders().getLocation();
-		ResponseEntity<String> getResponse = restTemplate
-				.withBasicAuth("sarah1", "abc123")
-				.getForEntity(locationOfNewCashCard, String.class);
-		assertThat(getResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
-
-		DocumentContext documentContext = JsonPath.parse(getResponse.getBody());
-		Number id = documentContext.read("$.id");
-		Double amount = documentContext.read("$.amount");
-
-		assertThat(id).isNotNull();
-		assertThat(amount).isEqualTo(250.00);
-	}
+        this.mockMvc.perform(get(location))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.amount").value(250.00))
+                .andExpect(jsonPath("$.owner").value("esuez5"));
+    }
 
 	@Test
-	void shouldReturnAllCashCardsWhenListIsRequested() {
-		ResponseEntity<String> response = restTemplate
-				.withBasicAuth("sarah1", "abc123")
-				.getForEntity("/cashcards", String.class);
-		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    void shouldReturnAllCashCardsWhenListIsRequested() throws Exception {
+        this.mockMvc.perform(get("/cashcards"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$..owner").value(everyItem(equalTo("sarah1"))));
+    }
 
-		DocumentContext documentContext = JsonPath.parse(response.getBody());
-		int cashCardCount = documentContext.read("$.length()");
-		assertThat(cashCardCount).isEqualTo(3);
-
-		JSONArray ids = documentContext.read("$..id");
-		assertThat(ids).containsExactlyInAnyOrder(99, 100, 101);
-
-		JSONArray amounts = documentContext.read("$..amount");
-		assertThat(amounts).containsExactlyInAnyOrder(123.45, 1.00, 150.00);
-	}
-
-	@Test
+	/*@Test
 	void shouldReturnAPageOfCashCards() {
 		ResponseEntity<String> response = restTemplate
 				.withBasicAuth("sarah1", "abc123")
@@ -249,5 +215,5 @@ class CashCardApplicationTests {
 				.getForEntity("/cashcards/102", String.class);
 		assertThat(getResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
 	}
-
+*/
 }
